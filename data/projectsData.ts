@@ -7,20 +7,17 @@ interface Project {
 
 const projectsData: Project[] = [
   {
-    title: 'A Search Engine',
-    description: `What if you could look up any information in the world? Webpages, images, videos
-    and more. Google has many features to help you find exactly what you're looking
-    for.`,
-    imgSrc: '/static/images/google.png',
-    href: 'https://www.google.com',
+    title: 'NetCat Replacement using python',
+    description: `What if during your security assessment, you stumbled on a server, with no netcat installed, but has python
+     in it, you can use this netcat replacement,Capable of establishing connection using TCP protocol, tranfer file and send command.`,
+    imgSrc: '/static/images/python.png',
+    href: 'https://github.com/EricArdiansa/Netthon',
   },
   {
-    title: 'The Time Machine',
-    description: `Imagine being able to travel back in time or to the future. Simple turn the knob
-    to the desired date and press "Go". No more worrying about lost keys or
-    forgotten headphones with this simple yet affordable solution.`,
-    imgSrc: '/static/images/time-machine.jpg',
-    href: '/blog/the-time-machine',
+    title: 'Port Scanner using python',
+    description: `simple CLI script for scanning open port using python, for learning Purpose.`,
+    imgSrc: '/static/images/python.png',
+    href: 'https://github.com/EricArdiansa/PortScanner',
   },
 ]
 
