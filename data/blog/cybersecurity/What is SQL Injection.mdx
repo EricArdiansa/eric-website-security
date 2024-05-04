@@ -1,0 +1,195 @@
+---
+title: What is SQL Injection and how its work?
+date: '2024-05-04'
+tags: ['vulnerabilities', 'CyberSecurity', 'Injection', 'SQL']
+draft: false
+summary: SQL injection (SQLi) refers to an injection attack wherein an attacker can execute malicious SQL statements that control a web application's database server.This allows an attacker to interfere with the queries that an application makes to its database. This can allow an attacker to view data that they are not normally able to retrieve.
+---
+
+## What is SQL Injection 
+
+SQL Injection (SQLi) is a type of injection attack. 
+An attacker can use it to make a web application process 
+and execute injected SQL statements as part of an existing SQL query.
+
+This can allow an attacker to view data that they are not normally able to
+retrieve. This might include data that belongs to other users, or any other 
+data that the application can access.
+
+## Impact from SQL Injection
+A successful SQL injection attack can result in 
+unauthorized access to sensitive data, such as:
+- Passwords
+- Credit card details
+- Personal user information
+
+# How SQL Injection Works
+Consider the following code, this is example of simple PHP
+Application that accept an id and shows the name of the user. The application
+uses GET method but i could use POST or any other HTTP method. This example based on the 
+MySQL database but the same principles apply for other databases.
+
+This code contains an SQL Injection vulnerability.
+```php:app.php
+<?php
+// check if the 'id' GET variable is set
+if (isset($_GET['id'])){
+$id = $_GET['id'];
+
+// Setup the connection to the database
+$mysqli = new mysqli('localhost', 'dbuser', 'dbpasswd', 'sql_injection_example');
+
+/Check connection before executing the SQL query
+if ($mysqli->connect_errno) {
+printf("Connect failed: %s\n", $mysqli->connect_error);
+exit();
+}
+
+// SQL query vulnerable to SQL injection
+$sql = "SELECT username
+FROM users
+WHERE id = $id";
+
+// Select queries return a result
+if ($result = $mysqli->query($sql)) {
+while($obj = $result->fetch_object()){
+print($obj->username);
+}
+}
+
+// If the database returns an error, print it to screen
+elseif($mysqli->error){
+print($mysqli->error);
+}
+}
+
+```
+let's pretend the database that has connection with this vulnerable
+web have this record inside it.
+
+|id|username    |password   |
+|--|------------|-----------|
+|1 |fitraakbar       |SakFH.Eatq3QnknC1j1uo.rjM4KIYn.o8gPb6Y2YBnNNNY.61mR9|
+|2 |ahmaddanu        |hA/hwCzhr6F23BsbRZBjdOA5eqTgV01cv30sy/O2EcL2/zG9k0aGy|
+|3 |rekalrizky       |OkV5tCMMsy91pkkMXHa94OgcunNtuhxsQcxaOW6tJimuaCO0FMDZm|
+|4 |faisaljoe      |2NgAjstT9NcN58zMcF/Rq.pYt5bg3iQ6OmdRgR3YWfT.ZVgmJR4FK|
+
+
+
+The following is an example of a normal HTTP request that could be made
+to the vulnerable application above
+- **Request**
+```
+http://localhost/?id=1
+```
+- **Response**
+```
+fitraakbar
+```
+The following is an example of a malicious HTTP request that exploit the
+vulnerability from SQL Injection.
+- **Request**
+```
+http://localhost/?id=-1 UNION SELECT password FROM users where id=1
+```
+- **Response**
+```
+SakFH.Eatq3QnknC1j1uo.rjM4KIYn.o8gPb6Y2YBnNNNY.61mR9
+```
+
+## Why this can be happens?
+#### Just using input validation
+
+We know that the id that is passed will always be a number. 
+However, the code does not validate user input at all.
+Validating user input is not a direct solution to SQL Injection, 
+but it helps us avoid malicious user data being interpreted by the 
+database.
+
+#### The code allows for SQL Injection
+The code accepts user input (in this case, from a GET parameter) 
+and includes it directly in the SQL statement.
+This allows an attacker to inject SQL into the query, 
+therefore tricking the application into sending a malformed query 
+to the database.
+
+#### Errors are displayed to the user
+If errors are displayed, an attacker may get information that could 
+lead to a compromise.
+Information such as the database type and version makes it easier 
+to exploit an SQL Injection vulnerability.
+
+## How to fix this vulnerability?
+To prevent and/or fix SQL Injection vulnerabilities start by using
+**Parameterized queries**, you will define a SQL query and use placeholders
+for user provided variables in the query. After the SQL statement is defined, 
+you can pass each parameter to the query. This allows the database to distinguish
+between the SQL command and data supplied by a user. You can use **PHP Data Objects (PDO)**
+to make implementing the Parameterized queries easy to do.
+
+The following code is the secure version from the vulnerable apps. This code
+below improve the security by using **PDO** with **Parameterized queries** to
+prevent SQl Injection vulnerability.
+
+```php:app.php
+<?php
+if (isset($_GET['id'])){
+  $id = $_GET['id'];
+  
+   // Validate data before it enters the database. 
+   if ( is_numeric($id) == true){
+    try{ // Check connection before executing the SQL query 
+       // Setup the connection to the database This is usually called a database handle (dbh)
+      $dbh = new PDO('mysql:host=localhost;dbname=sql_injection_example', 'dbuser', 'dbpasswd');
+      
+       // Use PDO::ERRMODE_EXCEPTION, to capture errors and write them to
+       // a log file for later inspection instead of printing them to the screen.
+      $dbh->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+      
+
+       // This fixes the SQL injection vulnerability.
+      $q = "SELECT username 
+          FROM users
+          WHERE id = :id";
+      // Prepare the SQL query string.
+      $sth = $dbh->prepare($q);
+      // Bind parameters to statement variables.
+      $sth->bindParam(':id', $id);
+      // Execute statement.
+      $sth->execute();
+      // Set fetch mode to FETCH_ASSOC to return an array indexed by column name.
+      $sth->setFetchMode(PDO::FETCH_ASSOC);
+      // Fetch result.
+      $result = $sth->fetchColumn();  
+      // HTML encode our result using htmlentities() to prevent stored XSS and print the result to the page
+      print( htmlentities($result) );
+      //Close the connection to the database.
+      $dbh = null;
+    }
+
+    catch(PDOException $e){
+      error_log('PDOException - ' . $e->getMessage(), 0);
+
+       // Stop executing, return an Internal Server Error HTTP status code (500),
+       // and display an error
+
+      http_response_code(500);
+      die('Error establishing connection with database');
+    }
+   } else{
+
+     // If the value of the 'id' GET parameter is not numeric, stop executing, return
+     // a 'Bad request' HTTP status code (400), and display an error
+    http_response_code(400);
+    die('Error processing bad or malformed request');
+   }
+}
+
+```
+
+## Conclusions
+
+SQL Injection can occur when we can passed SQL queries to the web application without
+sanitizing it. We can use technique like Parameterized queries and using PDO to prevent
+SQL Injection vulnerability. After all SQL injection vulnerability is one of the most common
+Injection attack that happens in application web with database.
