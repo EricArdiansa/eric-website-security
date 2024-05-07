@@ -1,0 +1,220 @@
+---
+title: Learn Assembly, create hello world program using Assembly language.
+date: '2024-05-06'
+tags: ['CyberSecurity', 'Computer', 'Assembly']
+draft: false
+summary: Assembly language is a low-level language that can write instruction the processors can understand. By using Assembly, developers can write human-readable machine instruction, which are then assembled into machine code, so that the processor can directly run them.
+---
+
+## What is Assembly Language?
+
+Assembly language is a low-level language that can write instruction 
+the processors can understand. By using Assembly, developers can write human-readable
+machine instruction, which are then assembled into machine code, so that 
+the processor can directly run them. For example, the Assembly code `add rax, 1` is much more
+intuitive and easier to remember than the equivalent machine shellcode `4883C001`
+and easier than the equivalent machine code `01001000 10000011 11000000 00000001`
+
+## What is shellcode
+Machine code is often represented as Shellcode, a hex representation of machine code bytes.
+Shellcode can be translated back to its Assembly and can also be loaded directly into memory
+as binary instructions to be executed.
+
+## History of Assembly Language
+As there are different processor designs, each processor understands a different set of 
+machine instruction and a different Assembly language. In the pas, application had to be written
+i Assembly for each processor, so it was not easy to develop an application for multiple
+processor.
+
+In early 1970, high level language like **C** were develop to make it possible to write a single
+easy to understand code that work on any processor without rewriting it for each processor.
+This was made possible by creating compiler for each language.
+
+Later on, interpreted languages were develop, like **Python, PHP, Bash, Javascript**, and others,
+which are usually not compiled but are interpreted during run time. These type of languages utilize pre-build libraries 
+to run their instructions.These libraries are typically written and compiled in other high-level languages like **C** or **C++**
+
+## Computer Architecture
+Today, most modern computers are built on what is known as the Von Neumann Architecture, which was developed back in 1945 by Von Neuman
+This Architecture executes machine code to perform specific algorithms. It mainly consist of
+the following elements.
+- Central Processing Unit (CPU)
+- Memory Unit
+- Input/Output devices
+
+The CPU itself consist of three main components
+- Control Unit (CU)
+- Arithmetic/Logic Unit (ALU)
+- Registers
+
+Assembly languages mainly work with the CPU and memory. This is why it is crucial 
+to understand the general design of computer architecture, so when we start using 
+assembly instructions to move and process data, we know where it's going and coming 
+from and how fast/expensive each instruction is. But for now, we will not discuss 
+about computer architecture in detail because it will need his own article, we will
+just want to focus on assembly languages.
+
+## What is Registers
+Each CPU core has a set of register, The registers are the fastest components in any computer
+as they are build within the CPU core. However, register are very limited in sized and 
+can only store a few bytes of data at a time.
+
+There are 2 most common types of registers, **Data Registers** and **Pointer Registers**.
+
+- **Data Registers**, are usually used for storing **instruction/syscall arguments**, The primary data register are **rax,rbx,rcx, and rdx**, The
+**rdi** and **rsi** registers also exist and are usually used for the instruction **destination** and **source** operands. Then
+, the secondary data registers that can be used when all previous registers are in use, which are **r8,r9,** and **r10**.
+
+- **Pointer Registers**, are used to store specific important address pointers. The main pointer registers 
+are the Base Stack Pointer **rbp**, which points to the **beginning of the Stack**, the 
+Current Stack Pointer **rsp**, which points to the **current location within the Stack** 
+(top of the Stack), and the Instruction Pointer **rip**, which holds the **address of 
+the next instruction**.
+
+## What is Sub-Registers
+Each **64-bit** register can be further divided into smaller sub-registers 
+containing the lower bits, at one byte **8-bits**, 2 bytes **16-bits**, and 4 
+bytes **32-bits**. Each sub-register can be used and accessed on its own, 
+so we don't have to consume the full 64-bits if we have a smaller amount of data.
+
+|sized in bits |sized in bytes |name                   |example |
+|--------------|---------------|-----------------------|--------|
+|16-bit        |2 bytes        |the base name          |**ax**     |
+|8-bit         |1 bytes        |base name and/or end with l          |**al**      |
+|32-bit        |4 bytes        |base name + starts with e          |**eax**      |
+|64-bit        |8 bytes        |base name + start with r          |**rax**      |
+
+The following are the names of the sub-register for all of the essential register in an
+x86_64 architecture. The description will show the data/or arguments Register accept.
+
+#### Data/Arguments Registers
+|Description   |64-bit register|32-bit register|16-bit register| 8-bit register |
+|--------------|---------------|---------------|---------------|----------------|
+|syscall number/ return value| rax | eax | ax | al |
+|Callee saved, used to hold long-lived values that shoud be preserved across calls| rbx | ebx | bx | bl|
+|1st arg - Destination operand| rdi | edi | ax | al |
+|2nd arg - Source operand| rsi | esi | si | sil |
+|3rd arg| rdx | edx | dx | dl |
+|4th arg - Loop counter| rcx | ecx | cx | cl |
+|5th arg| r8 | r8d | r8w | r8b |
+|6th arg| r9 | r9d | r9w | r9b |
+
+#### Pointers Registers
+|Description   |64-bit register|32-bit register|16-bit register| 8-bit register |
+|--------------|---------------|---------------|---------------|----------------|
+|Base Stack Pointer| rbp | ebp | bp | bpl |
+|Current/Top Stack Pointer| rsp | esp | sp | spl |
+|Instruction Pointer 'call only'| rip | eip | ip | ipl |
+
+## Memory Addresses
+64-bit processors have 64-bit wide addresses that 
+range from **0x0** to **0xffffffffffffffff**, so we expect the addresses to be in this 
+range. However, **RAM is segmented into various regions, like the Stack, the heap, 
+and other program and kernel-specific regions**. Each memory region has specific **read,
+write, execute** permissions that specify whether we can read from it, write to it, or call an address in it.
+
+Whenever an instruction goes through the Instruction Cycle to be executed, 
+the first step is to fetch the instruction from the address it's located at.
+There are several types of address fetching in the x86 architecture.
+|Addressing Mode/ types of address fetching   |Description|example|
+|--------------|---------------|---------------|
+|Immediate   |The value is given within the instruction|add 2
+|Register   |The register name that holds the value is given in the instruction|add rax|
+|Direct   |The direct full address is given in the instruction|call 0xffffffffaa8a25ff|
+|Indirect   |A reference pointer is given in the instruction|call 0x44d000 or call [rax]|
+|Stack   |Address is on top of the stack|add rsp|
+
+In the above table, lower is slower.The less immediate the value is, the slower it is to fetch it.
+
+## Address Endianness
+Address Endianness is the order of its bytes in which they are stored or retrieved from memory.
+There are two types of Endianness, **Little-Endian** and **Big-Endian**. Basically, with Little-Endian addresses
+is filled/retrieved first **right-to-left**. while with Big-Endian processor, addresses is
+filled/retrieved first **left-to-right**.
+
+for example if we have address 0x0011223344556677, this table will demonstrates
+how the address value stored.
+|Address type |How the value stored| Address value|
+|-------------|--------------------|--------------|
+|little endian|77 66 55 44 33 22 11 00|0x7766554433221100|
+|big endian   |00 11 22 33 44 55 66 77|0x0011223344556677|
+
+When retrieving he value, the processor has to use the same Endianness 
+used when storing them, or it will get the wrong value.
+
+## Data types
+in the x64 architecture, they support many types of data sizes. 
+for example byte, word, double word(dword), and quad word(qword).
+
+>a character used 4 bit in sizes, for example a or b
+
+|Name         |Lenght              | Example    |
+|-------------|--------------------|--------------|
+|byte| 8 bits or 1 bytes| 0xab|
+|word| 16 bits or 2bytes|0xabcd|
+|dword|32 bits or 4 bytes|0xabcdef12
+|qword|64 bits or 8 bytes|0xabcdef1234567890|
+
+> operands are the registers or subregisters use when doing instruction
+
+When using a varible with certain data type or use a data type with an instruction,
+both operand should be in the same size for example doing calculation using 32 bit subregister
+`add ebx, eax` they both are dword data types. the appropriate data type for each subregisters is
+- **al** for **byte**
+- **ax** for **word**
+- **eax** for **dword**
+- **rax** for **qword**
+
+## Assembly file structure
+Assembly language have three main part.
+|section|description|
+|-------|-----------|
+|**global_start**|This is a directive that directs the code to start executing|
+|**section.data**|This is data section, which should contain all of the variables|
+|**section.text**|This is te text section containing all of the code to be executed|
+
+> Both the .data and .text sections refer to the data and text memory segments,
+in which these instructions will be stored
+
+## Create Hello world program using Assembly
+First create file name helloworld.s, then we type the following code, on my example i use nano,
+a build-in text editor for linux.
+
+```s:code
+        global _start ; direct where code to start executing
+
+        section .data ; this section contains all of the variables
+message: db     "Hello World!!"
+
+        section .text
+_start:                ; this is place where code start executing
+        mov     rax, 1
+        mov     rdi, 1
+        mov     rsi, message
+        move    rdx, 13
+        syscall
+
+        mov     rax, 60
+        mov     rdi, 0
+        syscall
+
+```
+## Assembling and linking assembly code.
+Before this code can executed, we must first Assembling the code and then 
+linking to get OS librabries that may be needed.
+
+ #### Assembling code
+```
+nasm -f elf64 helloWorld.s
+```
+the -f elf64 flag is used to note that we want to assemble a 64-bit assembly code. if we want
+to assemble a 32-bit code, we would use -f elf. The output from this command is .o file.
+
+#### Linking file
+The final step is linking the file using ld command. if we want to assemble a 32-bit binary,
+we must add -m elf_i386 flag.
+```
+ld -o helloWorld helloWorld.o
+```
+
+Great now, we have our first program created using assembly language.
