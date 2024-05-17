@@ -1,0 +1,177 @@
+---
+title: Learn about JetBrains TeamCity CVE-2023-42793 authentication bypass to RCE.
+date: '2024-05-14'
+tags: ['Remote Code execution', 'Vulnerability', 'CVE']
+draft: false
+summary:  CVE-2023-42793 allow an unauthenticated malicious actor to execute arbitrary code on the TeamCity server prior to 2023.05.4. The exploitation of this CVE resulted in code execution with elevated privileges.
+---
+
+## What is CVE-2023-42793 ?
+
+CVE-2023-42793 is a critical Vulnerability which affecting the TeamCity 
+Server prior to version 2023.05.4 . TeamCity is a CI/CD platform offer by JetBrains that
+helps build and test software products. Its available as a cloud service or as an on-premises
+installation. This vulnerability, originally discovered by Sonar, a software company
+that provides tools and services for static code analysis to sofware development teams.
+
+TeamCity server version 2023.05.3 and below is prone to an authentication bypass, 
+which allows an unauthenticated attacker to gain remote code execution (RCE) on 
+the server.By default, the vulnerable web interface listens for HTTP connections on TCP port 8111.
+
+The exploitability for this Vulnerability is high, as the product is vulnerable in 
+a default configuration and an attacker can trivially exploit this server with a sequence
+of cURL commands. This can be happens because TeamCity has insecure handling of particular 
+paths, which enabled the bypassing of authorization protocols and lead to the execution
+of arbitrary code on the server.
+
+## Technical Analysis
+In this technical analysis i will use the source from the this website
+for reference and source to learn about technical side from this vulnerability (e.g)
+https://attackerkb.com/topics/1XEEEkGHzt/cve-2023-42793/rapid7-analysis and 
+https://www.sonarsource.com/blog/teamcity-vulnerability/.
+
+This root cause of this vulnerability is the `RequestInterceptor` class at `RequestInterceptors.java` file.
+The wildcard path `/**/RPC` leads to an authentication bypass.
+
+```java:RequestInterceptors.java
+public class RequestInterceptior extends handlerInterceptorAdapter {
+    .....
+    .....
+    Public RequestInterceptor(){
+        if (list == null )
+            ...
+    }
+    ....
+    ....
+    this.myPrehandlingDisabled.addpath("/**" + XmlRpcController.getPathSuffix());
+    ....
+    ....
+}
+
+```
+To learn why the wildcard path `/**.RPC2` leads to an authentication bypass vulnerability.
+We must understand what this path does. The TeamCity server is a large Java Spring application, 
+the configuration file `C:\TeamCity\webapps\ROOT\WEB-INF\buildServerSpringWeb.xml` creates several interceptors, 
+which intercept and potentially modify incoming HTTP requests to the server, one of which `calledOnceInterceptors` Java bean
+
+```xml:buildServerSpringWeb.xml
+  <mvc:interceptors>
+    <ref bean="externalLoadBalancerInterceptor"/>
+    <ref bean="agentsLoadBalancer"/>
+    <ref bean="calledOnceInterceptors"/>
+    <ref bean="pageExtensionInterceptor"/>
+  </mvc:interceptors>
+  
+    // calledOnceInterceptors bean is an instance othe JetBrains.buildServer.controllers.interceptors.RequestInterceptor
+  <bean id="calledOnceInterceptors" class="jetbrains.buildServer.controllers.interceptors.RequestInterceptors">
+    <constructor-arg index="0">
+      <list>
+        <ref bean="mainServerInterceptor"/>
+        <ref bean="registrationInvitations"/>
+        <ref bean="projectIdConverterInterceptor"/>
+        <ref bean="authorizedUserInterceptor"/>
+        <ref bean="twoFactorAuthenticationInterceptor"/>
+        <ref bean="firstLoginInterceptor"/>
+        <ref bean="pluginUIContextProvider"/>
+        <ref bean="callableInterceptorRegistrar"/>
+      </list>
+    </constructor-arg>
+  </bean>
+```
+We can see when constructing the `RequestInterceptors` instance, several Java beans are
+passed as a list including `authorizedUserInterceptor`. These beans will be added to the 
+`myInterceptors` list during instatiation
+
+```java:RequestInterceptors.java
+  public RequestInterceptors(@NotNull List<HandlerInterceptor> paramList) {
+    this.myInterceptors.addAll(paramList);
+    this.myPreHandlingDisabled.addPath("/**" + XmlRpcController.getPathSuffix());
+    this.myPreHandlingDisabled.addPath("/app/agents/**");
+  }
+```
+The `RequestInterceptors` instance will then intercept HTTP requests via its `prehandle method`, as shown in code below.
+*This is where the vulnerability lies*.
+
+```java:RequestInterceptors.java
+  public final boolean preHandle(HttpServletRequest paramHttpServletRequest, HttpServletResponse paramHttpServletResponse, Object paramObject) throws Exception {
+    try {
+        // if we can trigger this code, we will bypass authentication process
+      if (!requestPreHandlingAllowed(paramHttpServletRequest))
+        return true; // <--- return early, no authentication checks
+    } catch (Exception exception) {
+      throw null;
+    } 
+    Stack stack = requestIn(paramHttpServletRequest);
+    try {
+      if (stack.size() >= 70 && paramHttpServletRequest.getAttribute("__tc_requestStack_overflow") == null) {
+        LOG.warn("Possible infinite recursion of page includes. Request: " + WebUtil.getRequestDump(paramHttpServletRequest));
+        paramHttpServletRequest.setAttribute("__tc_requestStack_overflow", this);
+        Throwable throwable = (new ServletException("Too much recurrent forward or include operations")).fillInStackTrace();
+        paramHttpServletRequest.setAttribute("javax.servlet.jsp.jspException", throwable);
+      } 
+    } catch (Exception exception) {
+      throw null;
+    } 
+    if (stack.size() == 1)
+      for (HandlerInterceptor handlerInterceptor : this.myInterceptors) {
+        try {
+          if (!handlerInterceptor.preHandle(paramHttpServletRequest, paramHttpServletResponse, paramObject)) // <--- enforce authentication checks :(
+            return false; 
+        } catch (Exception exception) {
+          throw null;
+        } 
+      }  
+    return true;
+  }
+```
+if we can make `requestPreHandlingAllowed` returns false, the  `prehandle` 
+method will return early which mean we can skip authentication process. However if `requestPreHandlingAllowed` returns true, the `myInterceptors` list will be iterated and each
+interceptor on the lish will be run agains the request. This includes the `authorizedUserInterceptor` bean
+which will enforce authentication on the request if needed.
+
+Therefore, if we can send a request to a URL that causes to return false, we can skip
+authentication process.
+
+Then after examining the requestPreHandlingAllowed code, we see the PathSet
+`myPreHandlingDisabled`, which we know to contain the wildcard path `/**/RPC2`, 
+is used to test the incoming HTTP request’s path.
+
+```java:code
+  private boolean requestPreHandlingAllowed(@NotNull HttpServletRequest paramHttpServletRequest) {
+    try {
+      if (paramHttpServletRequest == null)
+        $$$reportNull$$$0(5); 
+    } catch (IllegalArgumentException illegalArgumentException) {
+      throw null;
+    } 
+    try {
+      if (WebUtil.isJspPrecompilationRequest(paramHttpServletRequest))
+        return false; 
+    } catch (IllegalArgumentException illegalArgumentException) {
+      throw null;
+    } 
+    try {
+    
+    } catch (IllegalArgumentException illegalArgumentException) {
+      throw null;
+    }
+    // the PathSet is here
+    return !this.myPreHandlingDisabled.matches(WebUtil.getPathWithoutContext(paramHttpServletRequest));
+  }
+
+```
+This means, any incoming HTTP request that matches the wilcard path `/**/RPC2` will not be 
+subjugate to the authentication performed by the beans in the `myInterceptors` list during 
+`RequestInterceptors.preHandle`.
+checks pe
+
+To exploit this vulnerability, attacker need to make request to the following endpoint.
+
+- `/app/rest/users/id:1/tokens/RPC2`. This endpoint is required to exploit the vulnerability. Because this url will bypass
+authentication checks performed by `prehandle` method.
+- `/app/rest/users`.  This endpoint is required by the attacker to create an arbitrary user.
+- `/app/rest/debug/processes`. This endpoint is abuse by attacker to create an arbitrary process. This is where we can
+inject our arbitrary command to be executed on server.
+
+## Proof of Concept Code
+
