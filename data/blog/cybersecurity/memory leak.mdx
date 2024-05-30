@@ -1,0 +1,113 @@
+---
+title: What is Memory Leak?
+date: '2024-05-30'
+tags: ['memory', 'C language']
+draft: false
+summary: A memory leak is when a program reserves memory and the reference to the item holding the memory is lost. Therefore, the program consuming the memory cannot release it back to the OS to be reallocated. Memory leak can occurs when programmers create a memory in a heap and forget to delete it.
+---
+
+## How memory are reserves?
+In C, you will typically use **malloc()** to reserve memory and **free()** 
+to release it back to the OS. Most high level languages do this automatically.
+The standard C function malloc is the means of implementing dynamic 
+memory allocation. It is defined in **stdlib.h** or **malloc.h**, depending 
+on what operating system you may be using. When dynamically allocated 
+memory is no longer needed, **free()** should be called to release it back to 
+the memory pool.
+
+Sometimes it is not known at the time the program is written 
+how much memory will be needed for some data; for example, when 
+it depends upon user input. In this case we would want to dynamically 
+allocate required memory after the program has started executing. 
+To do this we only need to declare a pointer, and invoke **malloc()**
+
+```
+int *ptr = malloc(sizeof(int));
+```
+Memory that has been allocated using **malloc()**, **realloc()**, or **calloc()** 
+must be released back to the system memory pool once it is no longer needed.
+Memory that is not released with free is however released when the current 
+program terminates on most operating systems.
+
+```
+free(ptr);
+```
+the following example is how we can use **malloc()** and free to allocated and 
+deallocated memory in c program.
+
+```
+int *myStuff = malloc( 20 * sizeof(int)); 
+if (myStuff != NULL) {
+   /* more statements here */
+   /* time to release myStuff */
+   free( myStuff );
+}
+```
+
+## What is Memory Leak?
+A memory leak is when a program reserves memory and the reference 
+to the item holding the memory is lost. Therefore, the program consuming 
+the memory cannot release it back to the OS to be reallocated. 
+Memory leak can occurs when programmers create a memory in a heap and 
+forget to delete it.
+
+The consequence of the memory leak is that it reduces the performance 
+of the computer by reducing the amount of available memory. Eventually, 
+in the worst case, too much of the available memory may become allocated, 
+all or part of the system or device stops working correctly, 
+the application fails, or the system slows down vastly.
+
+Memory leaks are particularly serious issues for programs like daemons and 
+servers which never terminate.
+
+#### example of memory leak
+
+```c:program.c
+#include <stdlib.h>
+ 
+void func(){
+    int* ptr = (int*)malloc(sizeof(int));
+ 
+    /* Do some work */
+ 
+    /* Return without freeing ptr*/
+    return;
+}
+```
+
+## Why Memory Leaks happen in C
+- When dynamically allocated memory is not freed up by calling free 
+then it leads to memory leaks. Always make ensure that for every dynamic
+ memory allocation using **malloc** or **calloc**, there is a corresponding free call.
+- When track of pointers that references to the allocated memory is lost then
+ it may happen that memory is not freed up. Hence keep the track of all pointers
+  and make ensure that memory is freed.
+- When the program terminates abruptly and the allocated memory is not freed 
+or if any part of code prevents the call of free then memory leaks may happen.
+
+Then, how to avoid memory leaks? to avoid memory leaks, memory allocated 
+on the heap should always be freed when no longer needed.
+The following is example how the memory which has been allocated in 
+the head must be released to avoid memory leak.
+
+```c:program.c
+#include <stdlib.h>
+ 
+void f(){
+    int* ptr = (int*)malloc(sizeof(int));
+ 
+    /* Do some work */
+ 
+    /* Memory allocated by malloc is released */
+    free(ptr);
+    return;
+}
+```
+
+## Conclusion
+Memory leaks can occur when we allocate memory on the heap but 
+forget to release it or free it. Due to memory leaks, we may 
+experience performance degradation and system becomes unstable. 
+Memory leaks cause more damage for long-running programs like servers. 
+To avoid memory leaks we must free dynamically allocated memory by calling 
+functions like **free()**.
