@@ -1,0 +1,219 @@
+---
+title: Reverse Engineering Android App to Bypass Emulator Protection.
+date: '2024-11-03'
+tags: ['android', 'Reverse Engineering', 'java']
+draft: false
+summary: Reverse Engineering an android application typically involves using specialized tools to decompiled application to understand how the application works and using the information to analyze how some protection within application can be bypassed. 
+---
+
+## What's Android Reverse Engineering
+Reverse Engineering an android application is the process of analyzing the compiled app to extract information
+about its source code. The goal of Reverse Engineering itself is to comprehend the code from application.
+
+But to bypass some of android protection like anti-root or anti-emulator we also need to know
+how to tamper and modify the application source code to change its behavior and ultimately bypass
+the protection implement by mobile app developer. 
+
+As a Penetration Tester, Reverse Engineering has been more of a complementary skill.
+Mobile app black-box testing increasingly requires disassembling compiled apps, applying patches, and 
+tampering with the binary code and live processes.
+
+## Basic Tampering Technique
+
+## Binary Patching
+Patching is the process of changing the compiled app, for example changing code in binary
+executables, modifying java bytecode, or tampering with resources. Patches can be applied in many ways,
+including editing binary files in a hex editor, or cheat engine or most common ways is
+to decompiling, editing, and re-assembling an app. The tools we can use to are apktool, jadx, jd-gui, dex2jar, jeb-decompiler and etc.
+
+But keep in mind that the modern mobile operating system strictly enforce code signing, so after we modified our application code
+we need to re-sign the app to run modified code without any problem. Tools like 
+Zipalign, apksigner, uber-apk-signer etc can help we re-sign the app we modified earlier.
+
+## Code injection
+Code injection is a very powerful technique that allows you to explore and modify 
+processes at runtime. Injection can be implemented in various ways, but you'll get 
+by without knowing all the details thanks to freely available, well-documented 
+tools that automate the process like Frida. These tools give you direct access to 
+process memory and important structures such as live objects instantiated by the app. 
+They come with many utility functions that are useful for resolving loaded libraries,
+hooking methods and native functions, and more. Process memory tampering is more 
+difficult to detect than file patching, so it is the preferred method in most cases.
+
+## How Application Implement Emulator Checking
+There are several checks that an application can perform in order to detect wheter we
+are running it on an emulated environment or an actual device. Programmers usually implement this functionality by
+searching the code in stackoverflow or currently chatgpt, this make the way they implement the anti-emulator check mostly the same.
+
+For example i got this code from this stackoverflow question.
+https://stackoverflow.com/questions/2799097/how-can-i-detect-when-an-android-application-is-running-in-the-emulator
+
+```java:com.package.emulatorchecking.java
+// another code
+public static boolean isAndroidEmulator() {
+    String model = Build.MODEL;
+    Log.d(TAG, "model=" + model);
+    String product = Build.PRODUCT;
+    Log.d(TAG, "product=" + product);
+    boolean isEmulator = false;
+    if (product != null) {
+        isEmulator = product.equals("sdk") || product.contains("_sdk") || product.contains("sdk_");
+    }
+    Log.d(TAG, "isEmulator=" + isEmulator);
+    return isEmulator;
+}
+// another code
+```
+
+Then, after understanding the implementation methods used by the application, we can identify 
+how we can bypass the anti-emulator protection used by the application.
+
+## Decompiling Application
+For this article i will use vulnerable application to show you the approaces to bypass the protection implemented by the developer.
+First we need to decompile the application to .java code to try to understand the application
+workflow.
+
+```
+jadx-gui.bat .\ReverzeMe1.apk
+```
+Let’s take a look at the implementation of the checkIfDeviceIsEmulator() function:
+```java:com.example.reverseme.chall.java
+    // another code 
+     public void onClick(View v) {
+                Boolean isEmulator = ChallengeJNI.this.checkIfDeviceIsEmulator();
+                if (isEmulator.booleanValue()) {
+                    Toasteroid.show(ChallengeJNI.this, "This Device is not supported", Toasteroid.STYLES.ERROR, 0);
+                    return;
+                }
+                String pass = ChallengeJNI.this.stringFromJNI();
+    // Another Code
+    public Boolean checkIfDeviceIsEmulator() {
+        return Build.FINGERPRINT.startsWith("generic") || Build.FINGERPRINT.startsWith(EnvironmentCompat.MEDIA_UNKNOWN) ||
+        Build.MODEL.contains("google_sdk") || Build.MODEL.contains("Emulator") || Build.MODEL.contains("Android SDK built for x86") 
+        || Build.MANUFACTURER.contains("Genymotion") || (Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic")) || 
+        "google_sdk".equals(Build.PRODUCT);
+    }
+}
+```
+Basically, what it is doing is checking some strings against a set of predefined strings, like we saw in the code from stackoverflow before. Now we will try to bypass them.
+
+## Reverse Engineering and Patching using apktool
+
+Firstly we will decompiled the application using this commmand.
+```
+apktool.exe d .\ReverzeMe1.apk -o .\extracted\
+```
+After the decompilation we will see inside the **extracted** folder the internal 
+stucture of the decoded apk. Commonly the normal APK Structure looks like this
+
+- smali — disassembled java code
+- res — resources, strings
+- assets — files bundled inside the APK
+- lib — native libraries (*.so files)
+- AndroidManifest.xml — decoded version
+- original and apktool.yml — used by apktool
+
+After decoding the app, we can see the AndroidManifest.xml.
+If we look inside the Smali folder we can see all the smali files.
+
+```
+cat.exe ChallengeJNI\\$1.smali
+```
+```
+cat.exe ChallengeJNI.smali
+```
+
+## Understanding Dalvik opcodes
+Currently i'm still learning how to understand and write the dalvik opcodes inside the .smali files.
+You can do your own research to get the information about the guide to read dalvik opcodes.
+But, we will very often see the code like this inside the .smali files.
+
+```
+.method private checkIfDeviceIsEmulator ()Ljava/lang/Boolean;
+```
+It is important to understand the meaning of this line, so let’s break it down:
+```
+.method private -> is the type of method.
+checkIfDeviceIsEmulator -> the method name.
+()Ljava/lang/Boolean; -> the type of the return value, prefixed with L, dots “.” replaced with slashes “/” and suffixed with semicolon ;
+```
+
+## Finding the **checkIfDeviceIsEmulator** method
+
+```smali.extracted.smali
+.method private checkIfDeviceIsEmulator()Ljava/lang/Boolean;
+    .locals 2
+
+    .prologue
+    .line 70
+    sget-object v0, Landroid/os/Build;->FINGERPRINT:Ljava/lang/String;
+
+    const-string v1, "generic"
+
+    invoke-virtual {v0, v1}, Ljava/lang/String;->startsWith(Ljava/lang/String;)Z
+
+    move-result v0
+
+    if-nez v0, :cond_1
+
+    sget-object v0, Landroid/os/Build;->FINGERPRINT:Ljava/lang/String;
+
+    const-string v1, "unknown"
+
+    .line 71
+    invoke-virtual {v0, v1}, Ljava/lang/String;->startsWith(Ljava/lang/String;)Z
+
+    move-result v0
+
+    if-nez v0, :cond_1
+
+    sget-object v0, Landroid/os/Build;->MODEL:Ljava/lang/String;
+
+    const-string v1, "google_sdk"
+
+    // the code continue
+```
+As we can see, there are different const-string declarations, having as the second argument a descriptive string such as **generic, unknown, google_sdk, Emulator, Android SDK built for x86,** and so on. 
+So, remembering the Java’s implementation of the validation function
+
+```java:com.example.reverseme.chall.java
+    public Boolean checkIfDeviceIsEmulator() {
+        return Build.FINGERPRINT.startsWith("generic") || Build.FINGERPRINT.startsWith(EnvironmentCompat.MEDIA_UNKNOWN) ||
+        Build.MODEL.contains("google_sdk") || Build.MODEL.contains("Emulator") || Build.MODEL.contains("Android SDK built for x86") 
+        || Build.MANUFACTURER.contains("Genymotion") || (Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic")) || 
+        "google_sdk".equals(Build.PRODUCT);
+    }
+```
+It is easy to see that, if we bypass those checks, we could maybe bypass the DeviceEmulator protection. So, let’s do that!
+First, I searched all the const-strings validations and I did some modifications:
+
+|original code| modified code |
+|-------------|---------------|
+|const-string v1, "unknown" |const-string v1, "unknown-info" |
+|const-string v1, "google_sdk" | const-string v1, "google_sdk-info" |
+|const-string v1, "Emulator" | const-string v1, "Emulator-info" |
+|const-string v1, "Android SDK built for x86" |const-string v1, "Android SDK built for x86-info" |
+|const-string v1, "Genymotion" | const-string v1, "Genymotion-info" |
+|const-string v1, "generic" | const-string v1, "generic-info" |
+|const-string v1, "generic" | const-string v1, "generic-info" |
+|const-string v0, "google_sdk" | const-string v0, "google_sdk-info" |
+
+After the modifications, we have to re-build the application. After this step, you should have the modified application already built inside the **/dist** folder.
+```
+apktool.exe b .\extracted\
+```
+then inside the dist folder, we will use zipalign to align our recompiled android application.
+```
+zipalign.exe -v 4 .\ReverzeMe1.apk .\ReverzeMe1-zipalign.apk
+```
+The next step is signing the application with apksigner, but, before doing that, we need to create a singkey. We will use keytool for this purpose.
+```
+keytool -genkey -v -keystore release.keystore -alias alias_name -keyalg RSA -keysize 2048 -validity 10000
+```
+Now that we have created the certificate, we can use apksigner to finish the process.
+```
+apksigner.bat sign --ks .\release.keystore --v1-signing-enabled true --v2-signing-enabled true .\ReverzeMe1-zipalign.apk
+```
+
+Then after running the application on the emulator, we successfully bypass the anti-emulator protection
+implemented by the developer.
