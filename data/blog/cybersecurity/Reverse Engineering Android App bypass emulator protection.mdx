@@ -1,5 +1,5 @@
 ---
-title: Reverse Engineering Android App to Bypass Emulator Protection.
+title: Reverse Engineering Android App to Bypass Anti-Emulator Protection.
 date: '2024-11-03'
 tags: ['android', 'Reverse Engineering', 'java']
 draft: false
@@ -15,7 +15,7 @@ how to tamper and modify the application source code to change its behavior and 
 the protection implement by mobile app developer. 
 
 As a Penetration Tester, Reverse Engineering has been more of a complementary skill.
-Mobile app black-box testing increasingly requires disassembling compiled apps, applying patches, and 
+Mobile app black-box Pentesting increasingly requires disassembling compiled apps, applying patches, and 
 tampering with the binary code and live processes.
 
 ## Basic Tampering Technique
@@ -24,11 +24,11 @@ tampering with the binary code and live processes.
 Patching is the process of changing the compiled app, for example changing code in binary
 executables, modifying java bytecode, or tampering with resources. Patches can be applied in many ways,
 including editing binary files in a hex editor, or cheat engine or most common ways is
-to decompiling, editing, and re-assembling an app. The tools we can use to are apktool, jadx, jd-gui, dex2jar, jeb-decompiler and etc.
+to decompiling, editing, and re-assembling an app. The tools we can use to are ** apktool, jadx, jd-gui, dex2jar, jeb-decompiler** and etc.
 
 But keep in mind that the modern mobile operating system strictly enforce code signing, so after we modified our application code
 we need to re-sign the app to run modified code without any problem. Tools like 
-Zipalign, apksigner, uber-apk-signer etc can help we re-sign the app we modified earlier.
+**Zipalign, apksigner, uber-apk-signer** etc can help we re-sign the app we modified earlier.
 
 ## Code injection
 Code injection is a very powerful technique that allows you to explore and modify 
@@ -133,12 +133,13 @@ But, we will very often see the code like this inside the .smali files.
 ```
 It is important to understand the meaning of this line, so let’s break it down:
 ```
-.method private -> is the type of method.
-checkIfDeviceIsEmulator -> the method name.
-()Ljava/lang/Boolean; -> the type of the return value, prefixed with L, dots “.” replaced with slashes “/” and suffixed with semicolon ;
+.method private -> // is the type of method.
+checkIfDeviceIsEmulator -> // the method name.
+()Ljava/lang/Boolean; -> // the type of the return value, prefixed with L, dots “.” replaced with slashes “/” and suffixed with semicolon ;
 ```
 
 ## Finding the **checkIfDeviceIsEmulator** method
+Inside the **ChallengeJNI.smali** we can see how anti-emulator protection implemented using dalvik opcodes.
 
 ```smali.extracted.smali
 .method private checkIfDeviceIsEmulator()Ljava/lang/Boolean;
