@@ -6,7 +6,7 @@ const siteMetadata = {
   description: 'Just sharing my interest in Hacking & Coding',
   language: 'en-us',
   theme: 'dark', // system, dark or light
-  siteUrl: 'https://ericardiansa.vercel.app',
+  siteUrl: 'https://0xduck.site',
   siteRepo: 'https://github.com/EricArdiansa/eric-website-security',
   siteLogo: '/static/images/logo.png',
   socialBanner: '/static/images/twitter-card.png',
