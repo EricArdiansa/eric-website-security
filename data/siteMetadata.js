@@ -1,12 +1,12 @@
 /** @type {import("pliny/config").PlinyConfig } */
 const siteMetadata = {
-  title: 'Hacking 0xDuck',
+  title: '0xDuck Hacks Stuff | Computer Security, Hacking & Programming',
   author: 'Eric Ardiansa',
-  headerTitle: 'Hacking 0xDuck',
-  description: 'Just sharing my interest in Hacking & Coding',
+  headerTitle: '0xDuck Hacks Stuff',
+  description: 'Just shares my interest in Computer Security, Hacking & Programming',
   language: 'en-us',
   theme: 'dark', // system, dark or light
-  siteUrl: 'https://0xduck.site',
+  siteUrl: 'https://0xduck.site/blog',
   siteRepo: 'https://github.com/EricArdiansa/eric-website-security',
   siteLogo: '/static/images/logo.png',
   socialBanner: '/static/images/twitter-card.png',
