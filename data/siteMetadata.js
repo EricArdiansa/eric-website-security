@@ -2,7 +2,7 @@
 const siteMetadata = {
   title: '0xDuck Hacks Stuff | Computer Security, Hacking & Programming',
   author: 'Eric Ardiansa',
-  headerTitle: '0xDuck Hacks Stuff',
+  headerTitle: '0xDuck | Computer Security, Hacking & Programming',
   description: 'Just shares my interest in Computer Security, Hacking & Programming',
   language: 'en-us',
   theme: 'dark', // system, dark or light
