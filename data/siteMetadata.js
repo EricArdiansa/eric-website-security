@@ -1,8 +1,8 @@
 /** @type {import("pliny/config").PlinyConfig } */
 const siteMetadata = {
-  title: 'CyberSecurity Blog',
+  title: 'Hacking 0xDuck',
   author: 'Eric Ardiansa',
-  headerTitle: 'CyberSecurity Blog',
+  headerTitle: 'Hacking 0xDuck',
   description: 'Just sharing my interest in Hacking & Coding',
   language: 'en-us',
   theme: 'dark', // system, dark or light
