@@ -1,8 +1,8 @@
 /** @type {import("pliny/config").PlinyConfig } */
 const siteMetadata = {
-  title: '0xDuck Hacks Stuff | Computer Security, Hacking & Programming',
+  title: 'Computer Science, Hacking & Programming',
   author: 'Eric Ardiansa',
-  headerTitle: 'Computer Security, Hacking & Programming',
+  headerTitle: 'Computer Science, Hacking & Programming',
   description: 'Just shares my interest in Computer Security, Hacking & Programming',
   language: 'en-us',
   theme: 'dark', // system, dark or light
