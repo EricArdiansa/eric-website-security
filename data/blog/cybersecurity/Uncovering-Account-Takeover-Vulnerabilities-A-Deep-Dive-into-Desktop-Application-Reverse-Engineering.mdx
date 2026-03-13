@@ -60,7 +60,7 @@ public static string Encrypt(string plainStr)
 }
 ```
 
-*📸 [Insert Image: Screenshot highlighting the `GlobalVars.Instance.AesHexKey` in dnSpy]*
+![dnSpy AES Key GlobalVars](/static/images/ato-desktop/dnspy-aes-key.png)
 
 The application wasn't hardcoding the keys in the binary, which initially seemed like a good security practice. But I needed to figure out how `GlobalVars.Instance.AesHexKey` was populated.
 
@@ -79,7 +79,7 @@ Content-Type: text/plain; charset=utf-8
 </ext_data>
 ```
 
-*📸 [Insert Image: Screenshot of Burp Suite showing the `GET /account/getextdata` request and the AES keys leaked in the response]*
+![Burp Suite AES Key Leak](/static/images/ato-desktop/burp-extdata.png)
 
 **Impact:** With the static AES keys (`ext_k` and `ext_i`) in hand, I could easily write a Python script to decrypt local user configurations and other protected strings that the application attempted to secure. This was a critical finding, but the rabbit hole went much deeper.
 
@@ -91,7 +91,7 @@ While monitoring the main login flow (`POST /account/logons`), I was analyzing t
 
 Using the AES keys I extracted in the previous step, I wrote a quick decryption script on the fly. Passing the server's encrypted response through my Python Rijndael (AES-CBC) decrypter revealed a beautifully formatted string hidden from the proxy traffic. Embedded deep within an `<AUTH>` XML tag, the decrypted payload revealed a peculiar flag called `BroadcasterPass`.
 
-*📸 [Insert Image: Screenshot of Python decryptor script output showing the hidden XML containing `BroadcasterPass`]*
+![Python Decryptor BroadcasterPass](/static/images/ato-desktop/python-decrypt.png)
 
 ```xml
 <!-- Decrypted Payload output -->
@@ -121,7 +121,7 @@ Here is the full attack chain summarized:
 4. **Extract Session Tokens:** Dump the active session keys and extract the `oauth_token` values for high-value targets (Whales/Administrators).
 5. **Account Takeover:** Inject the stolen token into my own API requests, gaining full control over victim accounts without ever knowing their usernames or passwords.
 
-*📸 [Insert Image: Screenshot of a terminal showing a successful connection to Redis and dumping the User Session Tokens]*
+![Redis Session Token Dump](/static/images/ato-desktop/redis-session-dump.png)
 
 ## Conclusion
 
