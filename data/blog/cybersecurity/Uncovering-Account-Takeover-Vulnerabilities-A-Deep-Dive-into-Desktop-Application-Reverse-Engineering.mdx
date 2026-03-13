@@ -32,7 +32,7 @@ In a recent engagement, I was analyzing a trading desktop application built on t
 ### Step 1: Understanding the Application Flow & Decompiling
 The first step in any desktop pentest is to understand what the application does. I ran the application, logged in using a test account, and clicked around to generate network traffic. Simultaneously, I loaded the main executable into **dnSpy** (a popular .NET debugger and assembly editor).
 
-![dnSpy Decompiled Code](/static/image/ato-desktop/dnspy.png)
+![dnSpy Decompiled Code](/static/images/ato-desktop/dnspy.png)
 
 My usual workflow is to grep the source code for keywords like [crypt], `key`, `password`, `token`, and `AES`. During the code review phase, my attention was drawn to a specific class handling data decryption: [Converter.cs]. 
 
