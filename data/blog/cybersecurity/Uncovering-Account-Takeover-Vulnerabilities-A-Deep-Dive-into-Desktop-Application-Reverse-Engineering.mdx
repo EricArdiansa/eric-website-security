@@ -34,7 +34,7 @@ The first step in any desktop pentest is to understand what the application does
 
 *📸 [Insert Image: Screenshot of dnSpy open with the application loaded, showing the tree view of the DLLs on the left]*
 
-My usual workflow is to grep the source code for keywords like [crypt](file:///c:/Users/eric/Downloads/PT%20Sector/Pentest/Desktop%20Pentest/STARDesktopDecompiled/StarUtil/Converter.cs#1376-1391), `key`, `password`, `token`, and `AES`. During the code review phase, my attention was drawn to a specific class handling data decryption: [Converter.cs](file:///c:/Users/eric/Downloads/PT%20Sector/Pentest/Desktop%20Pentest/STARDesktopDecompiled/StarUtil/Converter.cs). 
+My usual workflow is to grep the source code for keywords like [crypt], `key`, `password`, `token`, and `AES`. During the code review phase, my attention was drawn to a specific class handling data decryption: [Converter.cs]. 
 
 ### Step 2: Spotting Flawed Cryptography Architecture 
 By analyzing the decompiled code, I found out how the application handled encryption:
@@ -95,7 +95,7 @@ Using the AES keys I extracted in the previous step, I wrote a quick decryption 
 
 ```xml
 <!-- Decrypted Payload output -->
-<AUTH Username="AMIL007" 
+<AUTH Username="****redacted** 
       AccessToken="****redacted**" 
       BroadcasterIP="****redacted**" 
       BroadcasterPort="****redacted**" 
@@ -103,7 +103,7 @@ Using the AES keys I extracted in the previous step, I wrote a quick decryption 
 ```
 
 ### Step 5: The Domino Effect (Total ATO via Redis)
-By combining my static analysis (reading the decompiled [BooksleeveGate.cs](file:///c:/Users/eric/Downloads/PT%20Sector/Pentest/Desktop%20Pentest/STARDesktopDecompiled/StarConnector/BooksleeveGate.cs) file) and the newly decrypted network traffic, I realized that the `Broadcaster` was actually a **Redis** instance. 
+By combining my static analysis (reading the decompiled [BooksleeveGate.cs] file) and the newly decrypted network traffic, I realized that the `Broadcaster` was actually a **Redis** instance. 
 
 This wasn't just a minor piece of metadata—it was the plaintext password to the organization's backend Redis messaging server, distributed to every single client to manage Pub/Sub operations for live market data!
 
